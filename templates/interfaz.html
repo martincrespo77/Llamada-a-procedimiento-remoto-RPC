@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Contrasenas</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --text: #e2e8f0;
+            --accent: #3b82f6;
+            --accent-strong: #2563eb;
+            --ok: #22c55e;
+            --fail: #f87171;
+        }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: Arial, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .card { width: 380px; background: var(--panel); padding: 24px; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+        h1 { margin: 0 0 12px; font-size: 20px; text-align: center; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #0b1222; color: var(--text); }
+        button { margin-top: 12px; width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--accent); color: white; font-weight: bold; cursor: pointer; }
+        button:hover { background: var(--accent-strong); }
+        .hint { font-size: 12px; color: #cbd5e1; margin-top: 6px; }
+        .result { margin-top: 14px; padding: 12px; border-radius: 8px; background: #0b1222; min-height: 56px; }
+        .ok { color: var(--ok); font-weight: bold; }
+        .fail { color: var(--fail); font-weight: bold; }
+        .error { color: var(--fail); }
+        .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+        .toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #cbd5e1; }
+        .panel { margin-top: 18px; padding: 14px; border-radius: 12px; background: #111827; border: 1px solid #334155; }
+        .panel h2 { margin: 0 0 10px; font-size: 16px; color: #93c5fd; }
+        .info-list { list-style: none; padding: 0; margin: 0; }
+        .info-list li { margin-bottom: 6px; font-size: 14px; color: #cbd5e1; }
+        .rules { margin-top: 10px; padding: 10px; border-radius: 10px; background: #0b1222; border: 1px solid #334155; color: #cbd5e1; font-size: 14px; }
+        .success-list { margin-top: 10px; padding: 10px; border-radius: 10px; background: #0b1222; border: 1px solid #334155; color: #cbd5e1; font-size: 14px; max-height: 120px; overflow-y: auto; }
+        .success-list h3 { margin: 0 0 8px; font-size: 14px; color: #22c55e; }
+        .success-list ul { padding-left: 18px; margin: 0; }
+        .success-list li { font-size: 13px; margin-bottom: 4px; word-break: break-all; color: #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Verificador de Contrasenas</h1>
+        <label for="pwd">Contrasena</label>
+        <input type="password" id="pwd" placeholder="Ingresa la contrasena" />
+        <div class="toggle">
+            <input type="checkbox" id="showPwd" />
+            <label for="showPwd">Mostrar contrasena</label>
+        </div>
+        <button id="btn">Validar</button>
+        <div class="rules" style="margin-top: 12px;">
+            <strong>Reglas de validacion:</strong><br>
+            - Minimo 8 caracteres<br>
+            - Al menos 1 mayuscula<br>
+            - Al menos 1 minuscula<br>
+            - Al menos 1 numero<br>
+            - Al menos 1 caracter especial de: ! @ # $ % ^ & * ( ) - + [ ] { } ; : ' \" , . < > / ? \\ | ` ~
+        </div>
+        <div class="result" id="resultado" style="margin-top: 12px;">Esperando validacion...</div>
+
+        <div class="panel">
+            <h2>Analisis de protocolos y puertos en tiempo real</h2>
+            <ul class="info-list">
+                <li id="info-proto"></li>
+                <li id="info-host"></li>
+                <li id="info-port"></li>
+                <li id="info-endpoint"></li>
+                <li>Transporte: HTTP sobre TCP/IP</li>
+                <li>Metodo: POST</li>
+                <li>Formato: JSON { password: "..." }</li>
+            </ul>
+            <div class="success-list">
+                <h3>Contrasenas validadas (sesion)</h3>
+                <ul id="lista-validas"></ul>
+            </div>
+        </div>
+    </div>
+    <script>
+        const baseUrl = window.location.origin.replace(/:5000$/, ":8000");
+        const API_URL = `${baseUrl}/api/v1/validarPassword`;
+        const btn = document.getElementById("btn");
+        const pwdInput = document.getElementById("pwd");
+        const resDiv = document.getElementById("resultado");
+        const showPwd = document.getElementById("showPwd");
+        const infoProto = document.getElementById("info-proto");
+        const infoHost = document.getElementById("info-host");
+        const infoPort = document.getElementById("info-port");
+        const infoEndpoint = document.getElementById("info-endpoint");
+        const listaValidas = document.getElementById("lista-validas");
+        const contrasenasOk = [];
+
+        function renderInfo() {
+            const url = new URL(API_URL);
+            infoProto.textContent = `Protocolo: ${url.protocol.toUpperCase()}`;
+            infoHost.textContent = `Host: ${url.hostname}`;
+            infoPort.textContent = `Puerto: ${url.port || "(por defecto)"}`;
+            infoEndpoint.textContent = `Endpoint: ${url.pathname}`;
+        }
+        renderInfo();
+
+        showPwd.addEventListener("change", () => {
+            pwdInput.type = showPwd.checked ? "text" : "password";
+        });
+
+        btn.addEventListener("click", async () => {
+            const pwd = pwdInput.value;
+            resDiv.textContent = "Validando...";
+            try {
+                const resp = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({password: pwd})
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    resDiv.innerHTML = `<span class="error">Error:</span> ${data.error}`;
+                    return;
+                }
+                const estado = data.valida ? `<span class="ok">CONTRASENA VALIDA</span>` : `<span class="fail">CONTRASENA NO VALIDA</span>`;
+                resDiv.innerHTML = `${estado}<br/>Motivo: ${data.motivo || "Sin detalle"}`;
+                if (data.valida) {
+                    contrasenasOk.unshift(pwd);
+                    if (contrasenasOk.length > 5) contrasenasOk.pop();
+                    listaValidas.innerHTML = contrasenasOk.map(c => `<li>${c}</li>`).join("");
+                }
+            } catch (e) {
+                resDiv.innerHTML = `<span class="error">No se pudo conectar con el servidor.</span>`;
+            }
+        });
+    </script>
+</body>
+</html>
